@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Frog Feast 🐸</title>
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0a1a2e;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: 'Arial', sans-serif;
+        padding: 20px;
+    }
+
+    .game-container {
+        text-align: center;
+    }
+
+    canvas {
+        display: block;
+        border: 5px solid #1e90ff;
+        background: linear-gradient(180deg, #2a5f7f 0%, #1a3a5f 100%);
+        cursor: crosshair;
+        margin-bottom: 20px;
+        box-shadow: 0 0 20px rgba(30, 144, 255, 0.5);
+    }
+
+    .stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stat {
+        background: rgba(30, 144, 255, 0.2);
+        border: 2px solid #1e90ff;
+        padding: 15px;
+        border-radius: 8px;
+        color: white;
+        font-weight: bold;
+        font-size: 18px;
+    }
+
+    .instructions {
+        color: #aaa;
+        font-size: 14px;
+        margin-bottom: 15px;
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+        line-height: 1.6;
+    }
+
+    .instructions strong {
+        color: #1e90ff;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal.show {
+        display: flex;
+    }
+
+    .modal-content {
+        background: #0a1a2e;
+        border: 3px solid #1e90ff;
+        padding: 40px;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 0 30px rgba(30, 144, 255, 0.6);
+        min-width: 350px;
+    }
+
+    .modal-emoji {
+        font-size: 80px;
+        margin-bottom: 20px;
+    }
+
+    .modal-content h2 {
+        font-size: 42px;
+        color: #1e90ff;
+        margin-bottom: 15px;
+        text-shadow: 0 0 10px rgba(30, 144, 255, 0.5);
+    }
+
+    .modal-content p {
+        font-size: 18px;
+        color: #aaa;
+        margin-bottom: 25px;
+    }
+
+    .modal-stats {
+        background: rgba(30, 144, 255, 0.1);
+        border: 1px solid #1e90ff;
+        padding: 20px;
+        margin-bottom: 25px;
+        border-radius: 8px;
+        color: white;
+        font-size: 16px;
+    }
+
+    button {
+        background: linear-gradient(135deg, #1e90ff 0%, #00bfff 100%);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(30, 144, 255, 0.4);
+    }
+
+    button:active {
+        transform: translateY(0);
+    }
+</style>
+</head>
+<body>
+
+<div class="game-container">
+    <canvas id="gameCanvas" width="700" height="500"></canvas>
+    
+    <div class="stats">
+        <div class="stat">🎯 Score: <span id="score">0</span>/3</div>
+        <div class="stat">❌ Misses: <span id="misses">0</span>/5</div>
+        <div class="stat">⏱️ Time: <span id="time">90</span>s</div>
+    </div>
+
+    <div class="instructions">
+        <strong>🐸 Frog Feast</strong><br>
+        Click on flies to catch them with your tongue!<br>
+        Catch 3 flies to win • Avoid bees • Miss 5 times and you lose
+    </div>
+</div>
+
+<div class="modal" id="gameModal">
+    <div class="modal-content">
+        <div class="modal-emoji" id="modalEmoji"></div>
+        <h2 id="modalTitle">GAME OVER</h2>
+        <p id="modalMessage"></p>
+        <div class="modal-stats" id="modalStats"></div>
+        <button onclick="startGame()">PLAY AGAIN</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game state
+const gameState = {
+    score: 0,
+    misses: 0,
+    timeLeft: 90,
+    gameActive: false,
+    startTime: 0,
+    tongueReach: 180
+};
+
+// Frog - stationary in center
+const frog = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    size: 50,
+    tongueLength: 0,
+    maxTongueLength: 180,
+    tongueTargetX: 0,
+    tongueTargetY: 0,
+    tongueExtending: false,
+    tongueRetracting: false,
+    tongueSpeed: 140
+};
+
+let bugs = [];
+let particles = [];
+
+class Bug {
+    constructor(type) {
+        this.type = type;
+        this.reset();
+    }
+
+    reset() {
+        const side = Math.floor(Math.random() * 4);
+        if (side === 0) {
+            this.x = Math.random() * canvas.width;
+            this.y = -20;
+        } else if (side === 1) {
+            this.x = canvas.width + 20;
+            this.y = Math.random() * canvas.height;
+        } else if (side === 2) {
+            this.x = Math.random() * canvas.width;
+            this.y = canvas.height + 20;
+        } else {
+            this.x = -20;
+            this.y = Math.random() * canvas.height;
+        }
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const angle = Math.atan2(centerY - this.y, centerX - this.x);
+        const speed = this.type === 'fly' ? 0.8 : 0.6;
+        this.vx = Math.cos(angle) * speed + (Math.random() - 0.5) * 0.3;
+        this.vy = Math.sin(angle) * speed + (Math.random() - 0.5) * 0.3;
+        this.wobble = Math.random() * Math.PI * 2;
+        this.wobbleSpeed = 0.05 + Math.random() * 0.03;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.wobble += this.wobbleSpeed;
+
+        // Wrap around
+        if (this.x < -50) this.x = canvas.width + 50;
+        if (this.x > canvas.width + 50) this.x = -50;
+        if (this.y < -50) this.y = canvas.height + 50;
+        if (this.y > canvas.height + 50) this.y = -50;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(Math.sin(this.wobble) * 0.15);
+        ctx.font = this.type === 'fly' ? '24px Segoe UI Emoji' : '28px Segoe UI Emoji';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.type === 'fly' ? '🪰' : '🐝', 0, 0);
+        ctx.restore();
+    }
+
+    isHitByTongue(tongueX, tongueY) {
+        const dx = this.x - tongueX;
+        const dy = this.y - tongueY;
+        return Math.sqrt(dx * dx + dy * dy) < 35;
+    }
+}
+
+class Particle {
+    constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.life = 30;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.3;
+        this.life--;
+    }
+
+    draw() {
+        ctx.globalAlpha = this.life / 30;
+        ctx.font = '16px Arial';
+        ctx.fillText(Math.random() < 0.5 ? '✨' : '💫', this.x, this.y);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// Click handler
+canvas.addEventListener('pointerdown', (e) => {
+    if (!gameState.gameActive || frog.tongueExtending || frog.tongueRetracting) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    // Calculate distance from frog
+    const dx = clickX - frog.x;
+    const dy = clickY - frog.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Only shoot tongue if within reach
+    if (dist <= gameState.tongueReach) {
+        frog.tongueTargetX = clickX;
+        frog.tongueTargetY = clickY;
+        frog.tongueExtending = true;
+        shootTongue();
+    }
+});
+
+function shootTongue() {
+    const dx = frog.tongueTargetX - frog.x;
+    const dy = frog.tongueTargetY - frog.y;
+    const targetDist = Math.sqrt(dx * dx + dy * dy);
+
+    const extendInterval = setInterval(() => {
+        if (frog.tongueLength < targetDist && frog.tongueExtending) {
+            frog.tongueLength = Math.min(targetDist, frog.tongueLength + frog.tongueSpeed);
+        } else {
+            clearInterval(extendInterval);
+            
+            // Check for hits at max extension
+            const angle = Math.atan2(dy, dx);
+            const tongueEndX = frog.x + Math.cos(angle) * frog.tongueLength;
+            const tongueEndY = frog.y + Math.sin(angle) * frog.tongueLength;
+            
+            let hitBug = null;
+            for (let bug of bugs) {
+                if (bug.isHitByTongue(tongueEndX, tongueEndY)) {
+                    hitBug = bug;
+                    break;
+                }
+            }
+
+            if (hitBug) {
+                if (hitBug.type === 'fly') {
+                    gameState.score++;
+                    // Particle explosion
+                    for (let i = 0; i < 12; i++) {
+                        const pAngle = (i / 12) * Math.PI * 2;
+                        particles.push(new Particle(hitBug.x, hitBug.y, 
+                            Math.cos(pAngle) * 3, Math.sin(pAngle) * 3));
+                    }
+                    if (gameState.score >= 3) {
+                        endGame(true);
+                    }
+                } else {
+                    // Hit a bee
+                    endGame(false);
+                }
+                bugs = bugs.filter(b => b !== hitBug);
+            } else {
+                // Missed
+                gameState.misses++;
+                if (gameState.misses >= 5) {
+                    endGame(false);
+                }
+            }
+
+            // Retract tongue
+            frog.tongueExtending = false;
+            frog.tongueRetracting = true;
+            
+            const retractInterval = setInterval(() => {
+                if (frog.tongueLength > 0) {
+                    frog.tongueLength = Math.max(0, frog.tongueLength - frog.tongueSpeed);
+                } else {
+                    frog.tongueLength = 0;
+                    frog.tongueRetracting = false;
+                    clearInterval(retractInterval);
+                }
+            }, 16);
+        }
+    }, 16);
+}
+
+function updateGame() {
+    // Update bugs
+    bugs.forEach(bug => bug.update());
+
+    // Update particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        if (particles[i].life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+}
+
+function drawFrog() {
+    ctx.save();
+    ctx.translate(frog.x, frog.y);
+
+    // Draw tongue if active
+    if (frog.tongueLength > 0) {
+        const angle = Math.atan2(frog.tongueTargetY - frog.y, frog.tongueTargetX - frog.x);
+        const endX = Math.cos(angle) * frog.tongueLength;
+        const endY = Math.sin(angle) * frog.tongueLength;
+
+        // Tongue glow
+        ctx.strokeStyle = 'rgba(255, 20, 147, 0.3)';
+        ctx.lineWidth = 12;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Tongue main
+        ctx.strokeStyle = '#FF1493';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Tongue tip
+        ctx.fillStyle = '#FF69B4';
+        ctx.beginPath();
+        ctx.arc(endX, endY, 6, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw frog
+    ctx.font = '60px Segoe UI Emoji';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🐸', 0, 0);
+
+    // Draw reach radius
+    if (gameState.gameActive && !frog.tongueExtending && !frog.tongueRetracting) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.arc(0, 0, gameState.tongueReach, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+}
+
+function drawGame() {
+    // Clear canvas
+    ctx.fillStyle = 'rgba(42, 95, 127, 0.1)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw lily pads
+    ctx.fillStyle = 'rgba(34, 139, 34, 0.1)';
+    for (let i = 0; i < 5; i++) {
+        const x = (i + 0.5) * (canvas.width / 5);
+        const y = canvas.height * 0.8;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 40, 30, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Water ripples
+    const time = Date.now() / 1000;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(frog.x, frog.y, 50 + i * 30 + Math.sin(time * 2) * 5, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    if (gameState.gameActive) {
+        updateGame();
+
+        // Draw bugs
+        bugs.forEach(bug => bug.draw());
+
+        // Draw particles
+        particles.forEach(p => p.draw());
+    }
+
+    // Draw frog
+    drawFrog();
+
+    // Update UI
+    document.getElementById('score').textContent = gameState.score;
+    document.getElementById('misses').textContent = gameState.misses;
+
+    if (gameState.gameActive) {
+        const elapsed = Math.floor((Date.now() - gameState.startTime) / 1000);
+        gameState.timeLeft = Math.max(0, 90 - elapsed);
+        document.getElementById('time').textContent = gameState.timeLeft;
+
+        if (gameState.timeLeft === 0) {
+            endGame(gameState.score >= 3);
+        }
+    }
+
+    requestAnimationFrame(drawGame);
+}
+
+function initBugs() {
+    bugs = [];
+    bugs.push(new Bug('fly'));
+    bugs.push(new Bug('fly'));
+    bugs.push(new Bug('fly'));
+    bugs.push(new Bug('fly'));
+    
+    setInterval(() => {
+        if (gameState.gameActive && bugs.filter(b => b.type === 'fly').length < 7) {
+            bugs.push(new Bug('fly'));
+        }
+    }, 5000);
+
+    setInterval(() => {
+        if (gameState.gameActive && Math.random() < 0.3) {
+            bugs.push(new Bug('bee'));
+        }
+    }, 10000);
+}
+
+function endGame(won) {
+    gameState.gameActive = false;
+    const modal = document.getElementById('gameModal');
+    const emoji = document.getElementById('modalEmoji');
+    const title = document.getElementById('modalTitle');
+    const message = document.getElementById('modalMessage');
+    const stats = document.getElementById('modalStats');
+
+    if (won) {
+        emoji.textContent = '🏆';
+        title.textContent = 'YOU WIN!';
+        message.textContent = 'Excellent! Your frog feast was successful!';
+        stats.innerHTML = `Final Score: <strong>${gameState.score}</strong> | Time: <strong>${90 - gameState.timeLeft}s</strong>`;
+    } else {
+        emoji.textContent = '💀';
+        title.textContent = 'GAME OVER';
+        message.textContent = gameState.misses >= 5 ? 'Too many misses!' : 'You caught a bee!';
+        stats.innerHTML = `Final Score: <strong>${gameState.score}/3</strong> | Misses: <strong>${gameState.misses}/5</strong>`;
+    }
+
+    modal.classList.add('show');
+}
+
+function startGame() {
+    gameState.score = 0;
+    gameState.misses = 0;
+    gameState.timeLeft = 90;
+    gameState.gameActive = true;
+    gameState.startTime = Date.now();
+
+    frog.tongueLength = 0;
+    frog.tongueExtending = false;
+    frog.tongueRetracting = false;
+
+    particles = [];
+    bugs = [];
+    document.getElementById('gameModal').classList.remove('show');
+    initBugs();
+    drawGame();
+}
+
+// Start on load
+window.addEventListener('load', startGame);
+</script>
+
+</body>
+</html>
