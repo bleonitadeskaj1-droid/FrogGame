@@ -309,9 +309,9 @@ public class FrogGame extends JPanel implements ActionListener, MouseListener {
             }
             
             double angle = Math.atan2(frogY - y, frogX - x);
-            double speed = type.equals("fly") ? 0.8 : 0.6;
-            vx = Math.cos(angle) * speed + (random.nextDouble() - 0.5) * 0.3;
-            vy = Math.sin(angle) * speed + (random.nextDouble() - 0.5) * 0.3;
+            double speed = type.equals("fly") ? 2.6 : 2.2;
+            vx = Math.cos(angle) * speed + (random.nextDouble() - 0.5) * 1.2;
+            vy = Math.sin(angle) * speed + (random.nextDouble() - 0.5) * 1.2;
         }
         
         void update() {
